@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmdirSync, rmSync } from "node:fs";
 import { userInfo } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { isWindows, tmpdir } from "../../machine/context/process.ts";
@@ -36,7 +36,7 @@ export interface SpawnOptions {
 
 export class Spawn {
   static spawnBun = async (
-    execPath,
+    execPath: string,
     { args, cwd, timeout, env, stdout, stderr }: SpawnOptions,
   ): Promise<SpawnResult> => {
     // @ts-ignore
@@ -84,14 +84,17 @@ export class Spawn {
         stderr,
       });
     } finally {
-      // try {
-      //   rmSync(tmpdirPath, { recursive: true, force: true });
-      // } catch (error) {
-      //   console.warn(error);
-      // }
+      try {
+        rmSync(tmpdirPath, { recursive: true, force: true });
+      } catch (error) {
+        console.warn(error);
+      }
     }
   };
-  static spawnBunInstall = async (execPath, options: Pick<RunnerOptions, "cwd" | "timeouts">): Promise<TestResult> => {
+  static spawnBunInstall = async (
+    execPath: any,
+    options: Pick<RunnerOptions, "cwd" | "timeouts">,
+  ): Promise<TestResult> => {
     const {
       timeouts: { testTimeout },
       cwd,
@@ -138,12 +141,10 @@ export class Spawn {
       env: {
         GITHUB_ACTIONS: "true", // always true so annotations are parsed
       },
-
       // @ts-ignore
       stdout: chunk => pipeTestStdout(process.stdout, chunk),
       // @ts-ignore
       stderr: chunk => pipeTestStdout(process.stderr, chunk),
-      command: "",
     });
     const { tests, errors, stdout: stdoutPreview } = parseTestStdout(stdout, testPath);
     return {
@@ -158,9 +159,18 @@ export class Spawn {
     };
   };
 
+  static cleanLogs = async () => {
+    try {
+      rmSync(`/tmp/bun-runner.stdout.log`, { recursive: true, force: true });
+      rmSync(`/tmp/bun-runner.stderr.log`, { recursive: true, force: true });
+    } finally {
+    }
+  };
+
   static spawnSafe = async (options: SpawnOptions): Promise<SpawnResult> => {
     const {
       timeouts: { spawnTimeout },
+      options: runnerOptions,
     } = getRunnerOptions();
 
     const {
@@ -170,9 +180,13 @@ export class Spawn {
       env,
       timeout = spawnTimeout,
       // @ts-ignore
-      stdout = process.stdout.write.bind(process.stdout),
+      stdout = data => {
+        appendFileSync(`/tmp/bun-runner.stdout.log`, data);
+      },
       // @ts-ignore
-      stderr = process.stderr.write.bind(process.stderr),
+      stderr = data => {
+        appendFileSync(`/tmp/bun-runner.stderr.log`, data);
+      },
       retries = 0,
     } = options;
     let exitCode: string | number | undefined = undefined;
@@ -270,7 +284,9 @@ export class Spawn {
         resolve();
       }
     });
-    if (spawnError && retries < 5) {
+
+    const maxRetries = parseInt(runnerOptions["max-retries"], 10);
+    if (spawnError && retries < maxRetries) {
       const { code } = spawnError;
       if (code === "EBUSY" || code === "UNKNOWN") {
         await new Promise(resolve => setTimeout(resolve, 1000 * (retries + 1)));

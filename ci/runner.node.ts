@@ -64,7 +64,6 @@ export class RunnerRunTests {
     const tests = RunnerTests.getRelevantTests(testsPath);
     console.log("Running tests:", tests.length);
 
-    /** @type {VendorTest[] | undefined} */
     let vendorTests: VendorTest[] | undefined;
     let vendorTotal = 0;
     if (/true|1|yes|on/i.test(options["vendor"]) || (isCI && typeof options["vendor"] === "undefined")) {
@@ -87,7 +86,7 @@ export class RunnerRunTests {
         rmSync(filepath(i));
       } catch (_) {}
     }
-
+    let maxAttempts = options["max-attempts"] ? parseInt(options["max-attempts"]) : 1;
     const runTest = async (
       title: string,
       fn: () => Promise<TestResult>,
@@ -117,8 +116,8 @@ export class RunnerRunTests {
           } else {
             throw Error("Unable to retrieve test results");
           }
-        } while (attempts <= 3);
-        return Promise.resolve({ ...result, executions });
+        } while (attempts <= maxAttempts);
+        return Promise.resolve({ ...result, executions, attempts });
       });
 
       appendFileSync(filepath(partition), JSON.stringify(result));
@@ -327,6 +326,7 @@ export async function main() {
   }
   // @ts-ignore
   setRunnerCwd(import.meta.dirname ? dirname(import.meta.dirname) : process.cwd());
+  await Spawn.cleanLogs();
 
   printEnvironment();
   return await RunnerRunTests.runTests();

@@ -24,6 +24,8 @@ export type RunnerOptions = {
     "exclude": string[];
     "smoke": string;
     "vendor": string;
+    "max-attempts": string;
+    "max-retries": string;
   };
   filters: any;
 };
@@ -88,6 +90,14 @@ export const getRunnerOptions = (): RunnerOptions => {
       ["vendor"]: {
         type: "string",
         default: undefined,
+      },
+      ["max-attempts"]: {
+        type: "string",
+        default: "1",
+      },
+      ["max-retries"]: {
+        type: "string",
+        default: "2",
       },
     },
   });
